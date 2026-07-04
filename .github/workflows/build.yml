@@ -79,13 +79,33 @@ jobs:
             AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
             LD=ld.lld LLVM=1 LLVM_IAS=1 \
             -j$(nproc) 2>&1 | tee build.log
+          echo "=== Build artifacts in arch/arm64/boot/ ==="
+          ls -lh arch/arm64/boot/ 2>&1 || echo "boot dir not found"
 
       - name: Collect kernel outputs
         if: success()
         run: |
           mkdir -p out
-          cp arch/arm64/boot/Image.gz-dtb out/ 2>/dev/null || cp arch/arm64/boot/Image out/
-          cp arch/arm64/boot/dtbo.img out/ 2>/dev/null || true
+          echo "=== Looking for kernel image ==="
+          ls -lh arch/arm64/boot/ 2>&1
+          # 找任何 Image 开头的文件
+          KERNEL_IMG=""
+          for f in Image.gz-dtb Image.gz Image Image.bz2 Image.lz4; do
+            if [ -f "arch/arm64/boot/$f" ]; then
+              KERNEL_IMG="$f"
+              break
+            fi
+          done
+          if [ -z "$KERNEL_IMG" ]; then
+            echo "ERROR: No kernel image found in arch/arm64/boot/"
+            find arch/arm64/boot -type f 2>/dev/null | head -20
+            exit 1
+          fi
+          echo "Found kernel image: $KERNEL_IMG"
+          cp "arch/arm64/boot/$KERNEL_IMG" "out/Image.gz-dtb"
+          # dtbo
+          cp arch/arm64/boot/dtbo.img out/ 2>/dev/null || echo "no dtbo.img"
+          # dtb files
           find arch/arm64/boot/dts -name "*.dtb" -exec cp {} out/ \; 2>/dev/null || true
           ls -lh out/
 
@@ -101,6 +121,7 @@ jobs:
           do.cleanup=1
           block=auto
           is_slot_device=auto
+          kernel.filename=Image.gz-dtb
           AKEOF
           cd ..
           cp out/* AnyKernel3/
