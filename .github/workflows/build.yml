@@ -1,0 +1,53 @@
+name: Build KernelSU Kernel for RMX3031
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libncurses-dev \
+            build-essential device-tree-compiler cpio rsync unzip zip git curl
+
+      - name: Get proton-clang toolchain
+        run: |
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ../proton-clang
+
+      - name: Patch defconfig for KernelSU requirements
+        run: |
+          echo "CONFIG_MODULES=y" >> arch/arm64/configs/oppo6893_defconfig
+          echo "CONFIG_MODULE_UNLOAD=y" >> arch/arm64/configs/oppo6893_defconfig
+          echo "CONFIG_KPROBES=y" >> arch/arm64/configs/oppo6893_defconfig
+          echo "CONFIG_HAVE_KPROBES=y" >> arch/arm64/configs/oppo6893_defconfig
+          echo "CONFIG_EXT4_FS=y" >> arch/arm64/configs/oppo6893_defconfig
+
+      - name: Integrate KernelSU
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+
+      - name: Build kernel
+        run: |
+          export PATH="$GITHUB_WORKSPACE/../proton-clang/bin:$PATH"
+          make ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- oppo6893_defconfig
+          make ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) 2>&1 | tee build.log
+
+      - name: Upload build log (always, for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+
+      - name: Upload compiled kernel image
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Image.gz-dtb
+          path: arch/arm64/boot/Image.gz-dtb
