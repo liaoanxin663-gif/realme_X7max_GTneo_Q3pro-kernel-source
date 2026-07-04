@@ -38,10 +38,14 @@ jobs:
           echo "CONFIG_HAVE_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
 
-      - name: Patch arch/arm64/Makefile to remove unsupported -EL assembler flag
+      - name: Patch arch/arm64/Makefile to remove ALL -EL flags (KEY FIX)
         run: |
-          sed -i '/^AS\s*+= -EL$/d' arch/arm64/Makefile
-          grep -n "\-EL" arch/arm64/Makefile || echo "确认: AS += -EL 已被移除"
+          echo "=== Before patch ==="
+          grep -n "\-EL" arch/arm64/Makefile || echo "no -EL found"
+          # 删除所有包含 -EL 的行（AS += -EL 和 LD += -EL 都删）
+          sed -i '/-EL/d' arch/arm64/Makefile
+          echo "=== After patch ==="
+          grep -n "\-EL" arch/arm64/Makefile && echo "ERROR: -EL still exists" || echo "OK: all -EL removed"
 
       - name: Integrate KernelSU v0.9.5 (non-GKI)
         run: |
