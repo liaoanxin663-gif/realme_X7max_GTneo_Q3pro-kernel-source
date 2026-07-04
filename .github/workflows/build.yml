@@ -3,6 +3,9 @@ name: Build KernelSU Kernel for RMX3031
 on:
   workflow_dispatch:
 
+env:
+  KSU_TAG: v0.9.5
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -16,6 +19,11 @@ jobs:
           sudo apt-get install -y bc bison flex libssl-dev libncurses-dev \
             build-essential device-tree-compiler cpio rsync unzip zip git curl
 
+      - name: Verify kernel version
+        run: |
+          echo "=== Kernel version ==="
+          head -5 Makefile
+
       - name: Get proton-clang toolchain
         run: |
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ../proton-clang
@@ -27,30 +35,72 @@ jobs:
           echo "CONFIG_MODULE_UNLOAD=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_KPROBES=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_HAVE_KPROBES=y" >> arch/arm64/configs/oppo6893_defconfig
-          echo "CONFIG_EXT4_FS=y" >> arch/arm64/configs/oppo6893_defconfig
+          echo "CONFIG_HAVE_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
+          echo "CONFIG_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
 
       - name: Patch arch/arm64/Makefile to remove unsupported -EL assembler flag
         run: |
           sed -i '/^AS\s*+= -EL$/d' arch/arm64/Makefile
           grep -n "\-EL" arch/arm64/Makefile || echo "确认: AS += -EL 已被移除"
 
-      - name: Integrate KernelSU
+      - name: Integrate KernelSU v0.9.5 (non-GKI)
         run: |
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s "$KSU_TAG"
 
       - name: Generate defconfig
         run: |
-          set -euo pipefail
           export PATH="$GITHUB_WORKSPACE/../proton-clang/bin:$PATH"
-          make ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- oppo6893_defconfig 2>&1 | tee defconfig.log
+          make ARCH=arm64 CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            LD=ld.lld LLVM=1 LLVM_IAS=1 \
+            oppo6893_defconfig 2>&1 | tee defconfig.log
+
+      - name: Verify KSU in final config
+        run: |
+          grep -E "KPROBES|MODULES|KERNELSU|KSU" .config | head -20
 
       - name: Build kernel
         run: |
-          set -o pipefail
           export PATH="$GITHUB_WORKSPACE/../proton-clang/bin:$PATH"
-          make ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) 2>&1 | tee build.log
+          make ARCH=arm64 CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            LD=ld.lld LLVM=1 LLVM_IAS=1 \
+            -j$(nproc) 2>&1 | tee build.log
 
-      - name: Upload logs (always, for debugging)
+      - name: Collect kernel outputs
+        if: success()
+        run: |
+          mkdir -p out
+          cp arch/arm64/boot/Image.gz-dtb out/ 2>/dev/null || cp arch/arm64/boot/Image out/
+          cp arch/arm64/boot/dtbo.img out/ 2>/dev/null || true
+          find arch/arm64/boot/dts -name "*.dtb" -exec cp {} out/ \; 2>/dev/null || true
+          ls -lh out/
+
+      - name: Clone AnyKernel3 and pack
+        if: success()
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git
+          cd AnyKernel3
+          cat > anykernel.sh << 'AKEOF'
+          kernel.string=RMX3031 KernelSU v0.9.5 (Android 11, 4.14.186)
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          block=auto
+          is_slot_device=auto
+          AKEOF
+          cd ..
+          cp out/* AnyKernel3/
+          cd AnyKernel3
+          zip -r9 ../RMX3031-KSU-v0.9.5.zip * -x .git README.md
+          cd ..
+          ls -lh RMX3031-KSU-v0.9.5.zip
+
+      - name: Upload logs (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -60,9 +110,10 @@ jobs:
             build.log
             .config
 
-      - name: Upload compiled kernel image
+      - name: Upload AnyKernel3 zip
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Image.gz-dtb
-          path: arch/arm64/boot/Image.gz-dtb
+          name: RMX3031-KSU-AnyKernel3
+          path: RMX3031-KSU-v0.9.5.zip
+          retention-days: 30
