@@ -39,19 +39,22 @@ jobs:
           echo "CONFIG_HAVE_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
 
-      - name: CRITICAL FIX - Use system aarch64-linux-gnu-as (supports -EL natively)
+      - name: CRITICAL FIX - Restore as, use system gcc toolchain entirely
         run: |
-          echo "=== System cross toolchain installed ==="
+          echo "=== Restore proton-clang/bin/as if backed up ==="
+          if [ -f ../proton-clang/bin/as.proton-original ]; then
+            cd ../proton-clang/bin
+            rm -f as
+            mv as.proton-original as
+            echo "Restored original as"
+          fi
+          echo "=== System cross toolchain ==="
+          which aarch64-linux-gnu-gcc
+          aarch64-linux-gnu-gcc --version | head -1
           which aarch64-linux-gnu-as
-          aarch64-linux-gnu-as --version | head -2
-          echo "=== Overriding proton-clang/bin/as with system as ==="
-          cd ../proton-clang/bin
-          # Backup original as, symlink to system as
-          mv as as.proton-original
-          ln -sf $(which aarch64-linux-gnu-as) as
-          echo "=== Verify as now points to system ==="
-          ls -la as
-          as --version | head -2
+          aarch64-linux-gnu-as --version | head -1
+          which aarch64-linux-gnu-ld
+          echo "=== Will use aarch64-linux-gnu-gcc as CC (no clang) ==="
 
       - name: Integrate KernelSU v0.9.5 (non-GKI)
         run: |
@@ -59,12 +62,9 @@ jobs:
 
       - name: Generate defconfig
         run: |
-          export PATH="$GITHUB_WORKSPACE/../proton-clang/bin:$PATH"
-          make ARCH=arm64 CC=clang \
+          make ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
-            LD=ld.lld LLVM=1 \
+            CC=aarch64-linux-gnu-gcc \
             oppo6893_defconfig 2>&1 | tee defconfig.log
 
       - name: Verify KSU in final config
@@ -74,12 +74,9 @@ jobs:
       - name: Build kernel
         run: |
           set -o pipefail
-          export PATH="$GITHUB_WORKSPACE/../proton-clang/bin:$PATH"
-          make ARCH=arm64 CC=clang \
+          make ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
-            LD=ld.lld LLVM=1 \
+            CC=aarch64-linux-gnu-gcc \
             -j$(nproc) 2>&1 | tee build.log
           echo "=== Build artifacts in arch/arm64/boot/ ==="
           ls -lh arch/arm64/boot/ 2>&1 || echo "boot dir not found"
