@@ -32,18 +32,27 @@ jobs:
         run: |
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
 
+      - name: Generate defconfig
+        run: |
+          set -euo pipefail
+          export PATH="$GITHUB_WORKSPACE/../proton-clang/bin:$PATH"
+          make ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- oppo6893_defconfig 2>&1 | tee defconfig.log
+
       - name: Build kernel
         run: |
+          set -o pipefail
           export PATH="$GITHUB_WORKSPACE/../proton-clang/bin:$PATH"
-          make ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- oppo6893_defconfig
           make ARCH=arm64 CC=clang CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) 2>&1 | tee build.log
 
-      - name: Upload build log (always, for debugging)
+      - name: Upload logs (always, for debugging)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
-          path: build.log
+          name: logs
+          path: |
+            defconfig.log
+            build.log
+            .config
 
       - name: Upload compiled kernel image
         if: success()
