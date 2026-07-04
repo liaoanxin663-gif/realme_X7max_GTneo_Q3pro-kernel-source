@@ -75,6 +75,36 @@ jobs:
       - name: Build kernel
         run: |
           set -o pipefail
+          # 先生成 prepare 和 scripts（生成 trace 头文件）
+          echo "=== Running make prepare ==="
+          make ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CC=aarch64-linux-gnu-gcc \
+            KCFLAGS="-w" \
+            prepare 2>&1 | tail -20
+          echo "=== Running make scripts ==="
+          make ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CC=aarch64-linux-gnu-gcc \
+            KCFLAGS="-w" \
+            scripts 2>&1 | tail -10
+          # 检查 trace 头文件是否存在
+          echo "=== Check trace headers ==="
+          find . -name "*_trace.h" -path "*/trace/*" 2>/dev/null | head -10
+          find . -name "core_ctl_trace.h" 2>/dev/null
+          find . -name "oppo_foreground_io_opt_trace.h" 2>/dev/null
+          # 如果缺失，创建空文件作为 workaround
+          for f in include/trace/oppo_foreground_io_opt_trace.h kernel/sched/core_ctl_trace.h; do
+            if [ ! -f "$f" ]; then
+              echo "Creating empty: $f"
+              mkdir -p $(dirname "$f")
+              echo "#ifndef _TRACE_PLACEHOLDER" > "$f"
+              echo "#define _TRACE_PLACEHOLDER" >> "$f"
+              echo "#endif" >> "$f"
+            fi
+          done
+          # 正式编译
+          echo "=== Building kernel ==="
           make ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CC=aarch64-linux-gnu-gcc \
