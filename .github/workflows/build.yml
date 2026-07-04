@@ -38,19 +38,27 @@ jobs:
           echo "CONFIG_HAVE_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
 
-      - name: ULTIMATE FIX - Remove ALL -EL from ALL Makefiles
+      - name: CRITICAL FIX - Create as wrapper to filter -EL flag
         run: |
-          echo "=== BEFORE: searching ALL -EL in all Makefiles ==="
-          grep -rn "\-EL" . --include="Makefile" --include="*.mk" 2>/dev/null | grep -v ".git" | head -20 || echo "None found"
-          echo "=== Patching ALL Makefiles ==="
-          find . \( -name "Makefile" -o -name "*.mk" \) -not -path "./.git/*" | while read f; do
-            if grep -q "\-EL" "$f" 2>/dev/null; then
-              echo "Removing -EL from: $f"
-              sed -i 's/-EL//g' "$f"
+          echo "=== Creating as wrapper to filter -EL ==="
+          cd ../proton-clang/bin
+          mv as as.real
+          cat > as << 'WRAPEOF'
+          #!/bin/bash
+          # Filter out -EL option that proton-clang's as doesn't support
+          args=()
+          for arg in "$@"; do
+            if [ "$arg" != "-EL" ]; then
+              args+=("$arg")
             fi
           done
-          echo "=== AFTER: verify no -EL remains ==="
-          grep -rn "\-EL" . --include="Makefile" --include="*.mk" 2>/dev/null | grep -v ".git" | head -5 || echo "OK: All -EL removed from all Makefiles"
+          exec "$(dirname "$0")/as.real" "${args[@]}"
+          WRAPEOF
+          chmod +x as
+          echo "=== Verify wrapper ==="
+          cat as
+          echo "=== Test wrapper ==="
+          echo "" | ./as --version 2>&1 | head -3 || echo "test done"
 
       - name: Integrate KernelSU v0.9.5 (non-GKI)
         run: |
@@ -63,7 +71,7 @@ jobs:
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
-            LD=ld.lld LLVM=1 LLVM_IAS=1 \
+            LD=ld.lld LLVM=1 \
             oppo6893_defconfig 2>&1 | tee defconfig.log
 
       - name: Verify KSU in final config
@@ -72,12 +80,13 @@ jobs:
 
       - name: Build kernel
         run: |
+          set -e
           export PATH="$GITHUB_WORKSPACE/../proton-clang/bin:$PATH"
           make ARCH=arm64 CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
-            LD=ld.lld LLVM=1 LLVM_IAS=1 \
+            LD=ld.lld LLVM=1 \
             -j$(nproc) 2>&1 | tee build.log
           echo "=== Build artifacts in arch/arm64/boot/ ==="
           ls -lh arch/arm64/boot/ 2>&1 || echo "boot dir not found"
