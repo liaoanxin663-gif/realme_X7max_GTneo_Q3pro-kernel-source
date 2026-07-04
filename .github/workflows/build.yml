@@ -29,6 +29,11 @@ jobs:
           echo "CONFIG_HAVE_KPROBES=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_EXT4_FS=y" >> arch/arm64/configs/oppo6893_defconfig
 
+      - name: Patch arch/arm64/Makefile to remove unsupported -EL assembler flag
+        run: |
+          sed -i '/^AS\s*+= -EL$/d' arch/arm64/Makefile
+          grep -n "\-EL" arch/arm64/Makefile || echo "确认: AS += -EL 已被移除"
+
       - name: Integrate KernelSU
         run: |
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
