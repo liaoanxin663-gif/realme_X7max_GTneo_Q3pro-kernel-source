@@ -65,6 +65,7 @@ jobs:
           make ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CC=aarch64-linux-gnu-gcc \
+            KCFLAGS="-w" \
             oppo6893_defconfig 2>&1 | tee defconfig.log
 
       - name: Verify KSU in final config
@@ -77,6 +78,7 @@ jobs:
           make ARCH=arm64 \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CC=aarch64-linux-gnu-gcc \
+            KCFLAGS="-w" \
             -j$(nproc) 2>&1 | tee build.log
           echo "=== Build artifacts in arch/arm64/boot/ ==="
           ls -lh arch/arm64/boot/ 2>&1 || echo "boot dir not found"
