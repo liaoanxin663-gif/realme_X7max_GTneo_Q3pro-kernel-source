@@ -22,6 +22,7 @@ jobs:
 
       - name: Patch defconfig for KernelSU requirements
         run: |
+          sed -i 's/CONFIG_CC_STACKPROTECTOR_STRONG=y/CONFIG_CC_STACKPROTECTOR_NONE=y/' arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_MODULES=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_MODULE_UNLOAD=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_KPROBES=y" >> arch/arm64/configs/oppo6893_defconfig
