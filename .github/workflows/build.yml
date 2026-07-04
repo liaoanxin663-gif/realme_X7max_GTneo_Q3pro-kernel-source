@@ -38,17 +38,19 @@ jobs:
           echo "CONFIG_HAVE_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
           echo "CONFIG_FUNCTION_ERROR_INJECTION=y" >> arch/arm64/configs/oppo6893_defconfig
 
-      - name: ULTIMATE FIX: Remove ALL -EL from ALL Makefiles
+      - name: ULTIMATE FIX - Remove ALL -EL from ALL Makefiles
         run: |
           echo "=== BEFORE: searching ALL -EL in all Makefiles ==="
-          grep -rn "\-EL" . --include="Makefile" --include="*.mk" | grep -v ".git" | head -20 || echo "None found"
+          grep -rn "\-EL" . --include="Makefile" --include="*.mk" 2>/dev/null | grep -v ".git" | head -20 || echo "None found"
           echo "=== Patching ALL Makefiles ==="
-          find . $ -name "Makefile" -o -name "*.mk" $ -exec grep -l "\-EL" {} \; | while read f; do
-            echo "Removing -EL from: $f"
-            sed -i 's/-EL//g' "$f"
+          find . \( -name "Makefile" -o -name "*.mk" \) -not -path "./.git/*" | while read f; do
+            if grep -q "\-EL" "$f" 2>/dev/null; then
+              echo "Removing -EL from: $f"
+              sed -i 's/-EL//g' "$f"
+            fi
           done
           echo "=== AFTER: verify no -EL remains ==="
-          grep -rn "\-EL" . --include="Makefile" --include="*.mk" | grep -v ".git" | head -5 || echo "OK: All -EL removed from all Makefiles"
+          grep -rn "\-EL" . --include="Makefile" --include="*.mk" 2>/dev/null | grep -v ".git" | head -5 || echo "OK: All -EL removed from all Makefiles"
 
       - name: Integrate KernelSU v0.9.5 (non-GKI)
         run: |
